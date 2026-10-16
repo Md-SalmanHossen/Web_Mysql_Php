@@ -1,137 +1,90 @@
-<!DOCTYPE html>
-<html lang="en">
+<?php
+$conn = mysqli_connect("localhost", "root", "");
+if (!$conn) die("Connection failed");
 
-<head>
-   <meta charset="UTF-8">
-   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-   <title>Sales Database Solution</title>
-</head>
+// Create database
+mysqli_query($conn, "CREATE DATABASE IF NOT EXISTS sundarban");
+mysqli_select_db($conn, "sundarban");
 
-<body>
-   <?php
-   $host = 'localhost';
-   $user = 'root';
-   $password = '';
+// Create table
+mysqli_query($conn, "CREATE TABLE IF NOT EXISTS sales_data (
+    SaleID INT PRIMARY KEY,
+    ProductName VARCHAR(100),
+    CategoryID INT,
+    CategoryName VARCHAR(100),
+    Quantity INT,
+    Revenue INT
+)");
 
-   // 1. MySQL Server Connection
-   $conn = mysqli_connect($host, $user, $password);
+// Insert data
+mysqli_query($conn, "INSERT IGNORE INTO sales_data VALUES
+(1,'Laptop',301,'Electronics',5,350000),
+(2,'Mouse',301,'Electronics',15,45000),
+(3,'Chair',302,'Furniture',8,64000),
+(4,'Desk',302,'Furniture',6,72000),
+(5,'Bottle',303,'Accessories',20,30000),
+(6,'Pen',303,'Accessories',25,20000)");
 
-   if (!$conn) {
-      die("Connection failed: " . mysqli_connect_error());
-   }
+// Function to display table
+function showTable($conn, $sql)
+{
+    $result = mysqli_query($conn, $sql);
 
-   // 2. Database Creation & Selection
-   $sql_db = "CREATE DATABASE IF NOT EXISTS sundarban";
-   mysqli_query($conn, $sql_db);
-   mysqli_select_db($conn, "sundarban");
+    echo "<table border='1' cellpadding='8' cellspacing='0'><tr>";
 
-   // 3. Table Creation
-   $sql_table = "CREATE TABLE IF NOT EXISTS sales_data (
-        SaleID INT PRIMARY KEY,
-        ProductName VARCHAR(100),
-        CategoryID INT,
-        CategoryName VARCHAR(100),
-        Quantity INT,
-        Revenue INT
-    )";
-   mysqli_query($conn, $sql_table);
+    while ($field = mysqli_fetch_field($result))
+        echo "<th>{$field->name}</th>";
 
-   // 4. Data Insertion
-   $sql_insert = "INSERT IGNORE INTO sales_data (SaleID, ProductName, CategoryID, CategoryName, Quantity, Revenue) VALUES
-    (1, 'Laptop', 301, 'Electronics', 5, 350000),
-    (2, 'Mouse', 301, 'Electronics', 15, 45000),
-    (3, 'Chair', 302, 'Furniture', 8, 64000),
-    (4, 'Desk', 302, 'Furniture', 6, 72000),
-    (5, 'Bottle', 303, 'Accessories', 20, 30000),
-    (6, 'Pen', 303, 'Accessories', 25, 20000)";
+    echo "</tr>";
 
-   mysqli_query($conn, $sql_insert);
+    while ($row = mysqli_fetch_assoc($result)) {
+        echo "<tr>";
+        foreach ($row as $value)
+            echo "<td>$value</td>";
+        echo "</tr>";
+    }
 
-   // ==========================================
-   // QUERY 1: Display total revenue per category
-   // ==========================================
-   echo "<h3>--- Query 1 Result ---</h3>";
-   $sql1 = "SELECT CategoryName, SUM(Revenue) AS total_revenue 
-             FROM sales_data 
-             GROUP BY CategoryID, CategoryName 
-             ORDER BY total_revenue DESC";
-   $result1 = mysqli_query($conn, $sql1);
+    echo "</table><br>";
+}
 
-   if (mysqli_num_rows($result1) > 0) {
-      echo "<table border='1' cellpadding='8' cellspacing='0'>
-                <tr>
-                    <th>Category Name</th>
-                    <th>Total Revenue</th>
-                </tr>";
-      while ($row = mysqli_fetch_assoc($result1)) {
-         echo "<tr>
-                    <td>" . $row['CategoryName'] . "</td>
-                    <td>" . number_format($row['total_revenue'], 2) . "</td>
-                  </tr>";
-      }
-      echo "</table>";
-   }
+// Query 1: Total revenue by category
+echo "<h3>Query 1 Result</h3>";
+$q1 = "SELECT CategoryName,
+   SUM(Revenue) AS TotalRevenue
+   FROM sales_data
+   GROUP BY CategoryName
+   ORDER BY TotalRevenue DESC";
+showTable($conn, $q1);
 
-   // ==========================================
-   // QUERY 2: Update category to 'Low Performing' if revenue < 40,000
-   // ==========================================
-   echo "<h3>--- Query 2 Result ---</h3>";
-   $sql2 = "UPDATE sales_data SET CategoryName = 'Low Performing' WHERE Revenue < 40000";
+// Query 2: Update low revenue products
+echo "<h3>Query 2 Result</h3>";
 
-   if (mysqli_query($conn, $sql2)) {
-      echo "<div class='message'>Categories updated successfully for low revenue products!</div>";
-   } else {
-      echo "<div class='message' style='background-color: #ffccd5; border-color: #d90429;'>Update Error: " . mysqli_error($conn) . "</div>";
-   }
+if (mysqli_query($conn, "UPDATE sales_data
+SET CategoryName='Low Performing'
+WHERE Revenue < 40000"))
+    echo "Categories updated successfully!";
 
-   // ==========================================
-   // QUERY 3: Add 10% bonus revenue if revenue > 70,000
-   // ==========================================
-   echo "<h3>--- Query 3 Result ---</h3>";
-   $sql3 = "UPDATE sales_data SET Revenue = Revenue * 1.10 WHERE Revenue > 70000";
+// Query 3: Add 10% bonus
+echo "<h3>Query 3 Result</h3>";
 
-   if (mysqli_query($conn, $sql3)) {
-      echo "<div class='message'>10% bonus revenue successfully applied!</div>";
-   } else {
-      echo "<div class='message' style='background-color: #ffccd5; border-color: #d90429;'>Update Error: " . mysqli_error($conn) . "</div>";
-   }
+if (mysqli_query($conn, "UPDATE sales_data
+SET Revenue = Revenue * 1.10
+WHERE Revenue > 70000"))
+    echo "10% bonus revenue successfully applied!";
 
-   // ==========================================
-   // QUERY 4: Display product name, category name, and Seller status label
-   // ==========================================
-   echo "<h3>--- Query 4 Result ---</h3>";
-   $sql4 = "SELECT s1.ProductName, s1.CategoryName, 
-                    CASE 
-                        WHEN s1.Revenue > (SELECT AVG(s2.Revenue) FROM sales_data s2 WHERE s2.CategoryID = s1.CategoryID) 
-                        THEN 'Top Seller' 
-                        ELSE 'Regular Seller' 
-                    END AS SellerLabel 
-             FROM sales_data s1";
+// Query 4: Seller status using subquery
+echo "<h3>Query 4 Result</h3>";
 
-   $result4 = mysqli_query($conn, $sql4);
+showTable($conn, "SELECT ProductName, CategoryName,
+CASE
+    WHEN Revenue > (
+        SELECT AVG(s2.Revenue)
+        FROM sales_data s2
+        WHERE s2.CategoryID = sales_data.CategoryID
+    )
+    THEN 'Top Seller'
+    ELSE 'Regular Seller'
+END AS SellerStatus
+FROM sales_data");
 
-   if (mysqli_num_rows($result4) > 0) {
-      echo "<table border='1' cellpadding='8' cellspacing='0'>
-                <tr>
-                    <th>Product Name</th>
-                    <th>Category Name</th>
-                    <th>Seller Status</th>
-                </tr>";
-      while ($row = mysqli_fetch_assoc($result4)) {
-         echo "<tr>
-                    <td>" . $row['ProductName'] . "</td>
-                    <td>" . $row['CategoryName'] . "</td>
-                    <td>" . $row['SellerLabel'] . "</td>
-                  </tr>";
-      }
-      echo "</table>";
-   } else {
-      echo "<p>No products found.</p>";
-   }
-
-   // Final Connection Close
-   mysqli_close($conn);
-   ?>
-</body>
-
-</html>
+mysqli_close($conn);
